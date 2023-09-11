@@ -79,8 +79,11 @@ const main = async () => {
     let outputFilePath = inputFilePath.replace(/\.enc$/, "") + ".decrypted";
     let decryptedString = await readFile(inputFilePath, 344);
 
+    console.log("\n");
+    console.log("The decrypted contents:");
+    console.log("\n");
     console.log(decryptedString);
-    fs.writeFileSync(outputFilePath, decryptedString);
+    //fs.writeFileSync(outputFilePath, decryptedString);
   } else {
     console.log("\n");
     console.log("Encrypted data file not found at path " + inputFilePath);

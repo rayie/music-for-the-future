@@ -79,9 +79,14 @@ const main = async () => {
 
   //check if plaintext is the name of a file that exists at path ./data/<plaintext>, if so read it in and set plaintext to the contents of the file, otherwise, leave plaintext as plaintext
   if (fs.existsSync(inputFilePath)) {
-    let outputFile = `${inputFilePath}.enc`;
+    let outputFilePath = `${inputFilePath.replace(/\.source$/, "")}.enc`;
     let outputFileBuffer = await readFile(inputFilePath, 128);
-    fs.writeFileSync(outputFile, outputFileBuffer);
+
+    console.log("\n");
+    console.log("The encrypted contents:");
+    console.log("\n");
+    console.log(outputFileBuffer.toString());
+    fs.writeFileSync(outputFilePath, outputFileBuffer);
     process.exit(0);
   } else {
     console.log("\n");
