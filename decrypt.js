@@ -4,6 +4,10 @@ const fs = require("fs");
 // Load the public key
 var privateKey = "";
 
+const TAIL_SIZE = 16;
+const PLAIN_TEXT_CHUNK_SIZE = 128;
+const ECNCRYPTED_CHUNK_SIZE = 344;
+
 function decrypt(encryptedData) {
   const decryptedData = crypto.privateDecrypt(
     {
@@ -16,40 +20,47 @@ function decrypt(encryptedData) {
   return decryptedData;
 }
 
-function readFile(filePath, chunkSize) {
-  return new Promise((resolve, reject) => {
-    const chunks = Buffer.alloc;
+const processDecryptedFile = async filePath => {
+  //read the inputFile into memory using fs.readFileSync
+  let data = fs.readFileSync(filePath);
+  let str = data.toString("utf8");
+  let pos = str.lastIndexOf("==") + 2;
+  let sizeOfTailMarker = str.slice(pos).length;
+  let sizeOfTail = parseInt(str.slice(pos), 10);
+  //console.log(str);
+  //console.log(sizeOfTail);
 
-    //determine how big file is at filePath
-    const fileSize = fs.statSync(filePath).size;
-    console.log(fileSize, "file size");
+  //split str into 2 strings, at position str.length - sizeOfTail
+  let body = str.slice(0, str.length - (sizeOfTail + sizeOfTailMarker));
+  //console.log(body);
+  let tail = str.slice(
+    str.length - (sizeOfTail + sizeOfTailMarker),
+    str.length - sizeOfTailMarker
+  );
+  //console.log("\n---tail:--\n");
+  //console.log(tail);
 
-    //determine the total number of chunks that would result if we read in chunks of chunkSize
-    let finalString = "";
-
-    const readStream = fs.createReadStream(filePath, {
-      highWaterMark: chunkSize,
-    });
-
-    let cursor = 0;
-    readStream.on("data", chunk => {
-      let utfString = chunk.toString("utf8");
-      //decode base64 to utf-8
-      let buf = Buffer.from(utfString, "base64");
-      let decryptedBuffer = decrypt(buf);
-      finalString += decryptedBuffer.toString();
-    });
-
-    readStream.on("end", () => {
-      //console.log(chunks);
-      resolve(finalString);
-    });
-
-    readStream.on("error", error => {
-      reject(error);
-    });
-  });
-}
+  const bodyChunkSize = ECNCRYPTED_CHUNK_SIZE - TAIL_SIZE;
+  //console.log("Expected # of chunks:", body.length / bodyChunkSize);
+  let out = "";
+  for (let i = 0; i < body.length / bodyChunkSize; i++) {
+    //console.log("chunk " + i + ": ");
+    let chunk_body = body.slice(
+      i * bodyChunkSize,
+      i * bodyChunkSize + bodyChunkSize
+    );
+    let chunk_tail = tail.slice(i * TAIL_SIZE, i * TAIL_SIZE + TAIL_SIZE);
+    let chunk = chunk_body + chunk_tail;
+    //console.log(chunk);
+    let buf = Buffer.from(chunk, "base64");
+    //console.log(buf);
+    let decryptedBuffer = decrypt(buf);
+    //console.log(decryptedBuffer.toString());
+    out += decryptedBuffer.toString();
+  }
+  console.log("\n");
+  console.log(out);
+};
 
 const main = async () => {
   // Load the public key
@@ -76,14 +87,13 @@ const main = async () => {
   let inputFilePath = process.argv.slice(3).join(" ");
 
   if (fs.existsSync(inputFilePath)) {
-    let outputFilePath = inputFilePath.replace(/\.enc$/, "") + ".decrypted";
-    let decryptedString = await readFile(inputFilePath, 344);
+    //read the inputFile into memory using fs.readFileSync
 
-    console.log("\n");
-    console.log("The decrypted contents:");
-    console.log("\n");
-    console.log(decryptedString);
-    //fs.writeFileSync(outputFilePath, decryptedString);
+    //let tailSize = await getSizeOfTail(inputFilePath);
+    //console.log(tailSize);
+    await processDecryptedFile(inputFilePath);
+    console.log("\n\n");
+    return;
   } else {
     console.log("\n");
     console.log("Encrypted data file not found at path " + inputFilePath);

@@ -14,6 +14,10 @@ function encrypt(chunk) {
   return encryptedData;
 }
 
+const TAIL_SIZE = 16;
+const PLAIN_TEXT_CHUNK_SIZE = 128;
+const ECNCRYPTED_CHUNK_SIZE = 344;
+
 function readFile(filePath, chunkSize) {
   return new Promise((resolve, reject) => {
     const chunks = Buffer.alloc;
@@ -24,32 +28,47 @@ function readFile(filePath, chunkSize) {
 
     //determine the total number of chunks that would result if we read in chunks of chunkSize
     const chunkCount = Math.ceil(fileSize / chunkSize);
+    console.log("number of resulting chunks:", chunkCount);
 
     //multipley 256 by chunkCount
-    const totalChunkSize = chunkCount * 344;
+    const totalChunkSize = chunkCount * (ECNCRYPTED_CHUNK_SIZE - TAIL_SIZE);
+    const tail_totalChunkSize = chunkCount * TAIL_SIZE;
 
     //allocate a buffer of totalChunkSize
     const myBuffer = Buffer.alloc(totalChunkSize);
+    const tailBuffer = Buffer.alloc(tail_totalChunkSize);
 
     const readStream = fs.createReadStream(filePath, {
       highWaterMark: chunkSize,
     });
 
     let cursor = 0;
+    let tail_cursor = 0;
     readStream.on("data", chunk => {
       chunk = encrypt(chunk);
-      chunk = chunk.toString("base64");
+      let b64_chunk = chunk.toString("base64");
 
+      //strip off 4 bytes from b64_chunk and append it to tailBuffer
+      let tail_chunk = b64_chunk.slice(-1 * TAIL_SIZE);
+      console.log(tail_chunk, "tail_chunk");
+
+      //append the tail_chunk to tailBuffer
+      let tail_n = tailBuffer.write(tail_chunk, tail_cursor, tail_chunk.length);
+      console.log(tail_n, "bytes written starting at pos ", tail_cursor);
+      tail_cursor += tail_chunk.length;
+
+      b64_chunk = b64_chunk.slice(0, -1 * TAIL_SIZE);
       //append the chunk to myBuffer
-      let n = myBuffer.write(chunk, cursor, chunk.length);
+      let n = myBuffer.write(b64_chunk, cursor, b64_chunk.length);
       console.log(n, "bytes written starting at pos ", cursor);
-      cursor += chunk.length;
+      cursor += b64_chunk.length;
     });
 
     readStream.on("end", () => {
       //console.log(chunks);
       console.log("Size of my Buffer: " + myBuffer.length);
-      return resolve(myBuffer);
+      console.log("Size of my TailBuffer: " + tailBuffer.length);
+      return resolve({ myBuffer, tailBuffer, tbLength: tailBuffer.length });
     });
 
     readStream.on("error", error => {
@@ -79,14 +98,31 @@ const main = async () => {
 
   //check if plaintext is the name of a file that exists at path ./data/<plaintext>, if so read it in and set plaintext to the contents of the file, otherwise, leave plaintext as plaintext
   if (fs.existsSync(inputFilePath)) {
-    let outputFilePath = `${inputFilePath.replace(/\.source$/, "")}.enc`;
-    let outputFileBuffer = await readFile(inputFilePath, 128);
+    let pathToEncodedFile = `${inputFilePath.replace(/\.source$/, "")}.enc`;
+    let {
+      myBuffer: outputFileBuffer,
+      tailBuffer,
+      tbLength,
+    } = await readFile(inputFilePath, PLAIN_TEXT_CHUNK_SIZE);
 
     console.log("\n");
     console.log("The encrypted contents:");
     console.log("\n");
     console.log(outputFileBuffer.toString());
-    fs.writeFileSync(outputFilePath, outputFileBuffer);
+    //fs.writeFileSync(pathToEncodedFile, outputFileBuffer);
+
+    console.log("\n");
+    console.log("The encrypted tail contents:");
+    console.log("\n");
+    console.log(tailBuffer.toString() + tbLength.toString());
+    console.log("\n");
+    console.log("The size of the tailBuffer: " + tbLength);
+
+    fs.writeFileSync(
+      pathToEncodedFile,
+      outputFileBuffer.toString() + tailBuffer.toString() + tbLength.toString()
+    );
+
     process.exit(0);
   } else {
     console.log("\n");
